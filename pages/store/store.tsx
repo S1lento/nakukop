@@ -1,20 +1,25 @@
-// store.jsx
-import { createContext } from 'react' // or preact
+import { createContext } from 'react'
 import axios from "axios"
 import { createStoreon, StoreonModule } from 'storeon'
-import { customContext } from 'storeon/react' // or storeon/preact
+import { customContext } from 'storeon/react'
 
-interface State {
-  counter: number
-}
+import { Category, MappingData, Instance, State, Events } from './storeInterfaces'
 
-// Events declaration: map of event names to type of event data
-interface Events {
-
+const addToCartModule: StoreonModule<any, Events> = store => {
+  store.on('@init', () => ({ cart: [] }))
+  store.on('add', (state, value) => {
+    console.log(state, value, 'problem here')
+    return { cart: [...state.cart, value] }
+  })
+  store.on('delete', (state, value) => {
+    console.log(state, value, 'in delete');
+  })
 }
 
 const dataModule: StoreonModule<any, any> = store => {
-  store.on('@init', () => ({ data: [] }))
+  store.on('@init', () => {
+    store.dispatch('fetch');
+  })
   store.on('fetch', async (data, state) => {
     const products = axios.get('/api/products')
     const names = axios.get('/api/names')
@@ -23,16 +28,18 @@ const dataModule: StoreonModule<any, any> = store => {
   })
   store.on('fetch/success', (data, response) => {
     const [products, names] = response;
+    const result = Object.entries(names.data).map((data: MappingData) => {
+      const category: Category = { id: +data[0], name: data[1].G };
+      console.log(category, 'category');
 
-    const result = Object.entries(names.data).map((data) => {
-      const category = { id: +data[0], name: data[1].G };
       category.products = products.data.Value.Goods.map(product => {
         if (product.G !== category.id || product.P === 0) {
           return null;
         }
-        const mappedInstance = {
+        const mappedInstance: Instance = {
           id: product.T,
-          price: product.C,
+          // between 50 and 80 random value
+          price: Math.ceil(product.C * 50 + Math.random() * (80 + 1 - 50)),
           groupId: product.G,
           amount: product.P,
           isDisabled: false
@@ -47,7 +54,7 @@ const dataModule: StoreonModule<any, any> = store => {
       }
       return category;
     })
-    // it's a hack because documentation can't help with something harder, then counter or hello world
+
     data.data = result;
     return data;
   })
@@ -56,8 +63,7 @@ const dataModule: StoreonModule<any, any> = store => {
 
 
 
-export const store = createStoreon<any, any>([dataModule])
+export const store = createStoreon<any, any>([dataModule, addToCartModule])
 const StoreContext = createContext(store)
 
-// useStoreon will automatically recognize your storeon store and event types
 export const useStoreon = customContext(StoreContext)
